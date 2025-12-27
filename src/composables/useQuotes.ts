@@ -1,56 +1,54 @@
 import { computed, ref } from "vue";
 import type { QuoteItem } from "../types/quote";
 
-// Import statique du JSON (bundlé par Vite au build)
+// On importe le JSON "comme un fichier de données".
+// Vite l'intègre au build, donc pas besoin d'aller le chercher via une API.
 import rawQuotes from "../data/quotes.json";
 
 /**
- * Composable : useQuotes()
+ * useQuotes() = une “boîte à outils” pour gérer les citations.
  *
- * Un “composable” (Composition API) est une fonction qui encapsule :
- * - de l’état réactif (ref / reactive)
- * - des valeurs dérivées (computed)
- * - des actions (fonctions)
+ * En Vue, un "composable" c’est juste une fonction qui :
+ * - garde un petit bout d’état (comme une mini-mémoire)
+ * - calcule des valeurs à partir de cet état
+ * - expose des actions (des fonctions) pour modifier cet état
  *
- * Pourquoi un composable ici ?
- * - On veut isoler la logique “métier” (choisir une citation) hors des composants UI.
- * - Les composants deviennent simples : ils affichent ce qu’on leur donne (props).
- * - C’est une excellente étape avant Pinia : même concept (state + actions), mais plus léger.
- *
- * Quand migrer vers Pinia ?
- * - Si plusieurs pages doivent partager/modifier cet état.
- * - Si tu ajoutes de la persistance (localStorage) ou des fetch API.
+ * L’intérêt :
+ * - Tes composants (HomeView, Citation.vue, etc.) restent simples :
+ *   ils affichent, ils appellent une action, mais ils ne gèrent pas la logique.
+ * - Toute la logique “choisir une citation” est centralisée ici.
  */
 
 /**
- * Dataset source (JSON)
+ * Liste complète des citations.
  *
- * On cast en QuoteItem[] car JSON n’est pas typé nativement.
- * Hypothèse :
- * - Ton fichier quotes.json respecte bien la structure QuoteItem (id/text/author...).
+ * `rawQuotes` vient d'un fichier JSON, donc TypeScript ne peut pas "deviner" son type.
+ * On lui dit : "considère que c'est un tableau de QuoteItem".
  *
- * Limite :
- * - TypeScript ne “valide” pas à l’exécution.
- * - Si le JSON est invalide, l’app pourrait se comporter bizarrement.
- *   (plus tard : on pourra ajouter une validation runtime)
+ * À retenir :
+ * - TypeScript vérifie surtout au moment d’écrire du code.
+ * - Il ne vérifie pas automatiquement que ton JSON est correct au runtime.
+ *   (si tu mets un JSON cassé, ça peut bugger quand même)
  */
 const quotes = rawQuotes as QuoteItem[];
 
 /**
- * Renvoie un nouvel index aléatoire différent de l'actuel (si possible).
+ * Choisit un nouvel index aléatoire.
  *
- * Pourquoi éviter le même index ?
- * - UX : cliquer "Nouvelle citation" et voir la même citation est frustrant.
+ * Pourquoi on parle d’index ?
+ * - `quotes` est un tableau.
+ * - Une citation se récupère par sa position : quotes[0], quotes[1], etc.
  *
- * Cas limites :
- * - Si length <= 1, on force 0 (pas d'alternative possible).
+ * On essaie d’éviter de retomber sur le même index,
+ * sinon le bouton “Nouvelle citation” peut afficher la même citation.
  */
 function pickNewIndex(current: number, length: number): number {
+	// S'il y a 0 ou 1 citation, pas de choix possible : on revient à 0.
 	if (length <= 1) return 0;
 
 	let next = current;
 
-	// Tant qu'on retombe sur la même, on relance un tirage
+	// Tant qu’on tombe sur la même position, on retire au sort.
 	while (next === current) {
 		next = Math.floor(Math.random() * length);
 	}
@@ -60,21 +58,26 @@ function pickNewIndex(current: number, length: number): number {
 
 export function useQuotes() {
 	/**
-	 * Index de la citation courante.
+	 * currentIndex = “la position de la citation affichée”.
 	 *
-	 * - ref() rend la valeur réactive
-	 * - Quand currentIndex change, les computed dépendants se recalculent
-	 * - Et le template se re-render automatiquement
+	 * ref(0) :
+	 * - crée une valeur réactive (Vue la surveille)
+	 * - si on la change, l’interface se met à jour automatiquement
 	 */
 	const currentIndex = ref(0);
 
 	/**
-	 * Citation courante (valeur dérivée)
+	 * currentQuote = “la citation correspondant à currentIndex”.
 	 *
-	 * - computed = "getter" réactif
-	 * - Mis en cache tant que currentIndex ne change pas
+	 * computed(...) :
+	 * - c’est un calcul automatique basé sur des valeurs réactives
+	 * - ici : basé sur currentIndex
 	 *
-	 * On retourne QuoteItem | null pour gérer les cas où le JSON serait vide.
+	 * Pourquoi computed ?
+	 * - Tu n’as pas besoin de recalculer à la main à chaque clic.
+	 * - Vue le fait pour toi quand currentIndex change.
+	 *
+	 * On renvoie `null` si le tableau est vide, pour éviter de crasher l’UI.
 	 */
 	const currentQuote = computed<QuoteItem | null>(() => {
 		if (!quotes.length) return null;
@@ -82,20 +85,26 @@ export function useQuotes() {
 	});
 
 	/**
-	 * Action : passer à une nouvelle citation.
+	 * nextQuote() = ce que le bouton “Nouvelle citation” déclenche.
 	 *
-	 * - Ne touche pas au dataset, uniquement l'index
-	 * - Déclenche automatiquement la mise à jour de currentQuote et de l’UI
+	 * Concrètement :
+	 * - on ne modifie PAS le tableau de citations
+	 * - on change juste l’index courant
+	 * => et comme currentQuote dépend de currentIndex,
+	 *    l’écran se met à jour automatiquement.
 	 */
 	function nextQuote() {
 		currentIndex.value = pickNewIndex(currentIndex.value, quotes.length);
 	}
 
 	/**
-	 * API publique du composable :
+	 * Ce qu’on “rend disponible” à l’extérieur (HomeView, etc.)
+	 *
 	 * - currentQuote : la citation à afficher
-	 * - nextQuote : l’action du bouton "Nouvelle citation"
-	 * - quotes/currentIndex : exposés pour debug / usages futurs (liste, stats, etc.)
+	 * - nextQuote : la fonction à appeler quand on veut changer
+	 *
+	 * - quotes / currentIndex : utiles pour debug ou futures features
+	 *   (ex: afficher le nombre total, faire une liste, etc.)
 	 */
 	return {
 		quotes,

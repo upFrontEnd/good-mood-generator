@@ -1,57 +1,71 @@
 <script setup lang="ts">
 	/**
-	 * HomeView (route "/")
+	 * HomeView = la page d’accueil (URL "/")
 	 *
-	 * Rôle du fichier :
-	 * - C'est une "vue" (page) : elle correspond à une route du router.
-	 * - Elle orchestre l’affichage (layout) et les interactions (boutons).
-	 *
-	 * Philosophie d’architecture (montée en compétence) :
-	 * - La vue ne contient pas la logique métier du tirage de citations.
-	 *   Cette logique est isolée dans un composable : useQuotes().
-	 * - La vue assemble des composants atomiques (Photo/Citation/Author/Bio/ShareButtons).
-	 *   Chaque composant a une responsabilité unique : affichage (UI).
+	 * À retenir :
+	 * - Le router dit : “quand on va sur /, on affiche HomeView”.
+	 * - HomeView ne “fabrique” pas les citations : elle les affiche.
+	 * - Toute la logique “quelle citation montrer ?” est dans useQuotes().
 	 */
 
 	import { useQuotes } from "../composables/useQuotes";
 
-	// Composants atomiques : chacun affiche une partie bien précise de la donnée.
+	/**
+	 * Composants = petites briques d’interface.
+	 *
+	 * Idée :
+	 * - Au lieu d’avoir une grosse page avec plein de HTML,
+	 *   on découpe en petites pièces réutilisables.
+	 * - Chaque composant fait une chose simple (photo, texte, auteur, etc.).
+	 */
 	import Photo from "../components/Photo.vue";
 	import Citation from "../components/Citation.vue";
 	import Author from "../components/Author.vue";
 	import Bio from "../components/Bio.vue";
 	import ShareButtons from "../components/ShareButtons.vue";
+	import ThemeToggle from "../components/ThemeToggle.vue";
 
 	/**
-	 * Source de vérité pour la citation courante :
-	 * - currentQuote : computed (réactif) => l'UI se met à jour automatiquement.
-	 * - nextQuote() : action => change la citation en modifiant un index interne.
+	 * useQuotes() nous donne :
+	 * - currentQuote : “la citation à afficher maintenant”
+	 * - nextQuote() : “passe à une autre citation”
+	 *
+	 * Comme currentQuote est réactif, l’écran se met à jour tout seul quand on clique.
 	 */
 	const { currentQuote, nextQuote } = useQuotes();
 	</script>
 
 	<template>
 		<main class="page">
-			<h1 class="h1">Les piliers de la sagesse</h1>
+			<!-- Titre de la page -->
+			<header class="header">
+				<h1 class="h1">Les piliers de la sagesse</h1>
+
+				<!--
+					ThemeToggle :
+					- petit interrupteur qui change data-theme sur <html>
+					- ton SCSS écoute [data-theme="light/dark"] et change les variables CSS
+				-->
+				<ThemeToggle />
+			</header>
 
 			<!--
-				Cas limite (robustesse) :
-				- Si le JSON est vide ou mal importé, currentQuote peut être null.
-				- On affiche un message au lieu d’avoir une UI cassée.
+				Filet de sécurité :
+				- si ton JSON est vide (ou mal importé), currentQuote vaut null
+				- on affiche un message plutôt qu’une page cassée
 			-->
 			<p v-if="!currentQuote" class="muted">Aucune citation disponible.</p>
 
 			<!--
-				UI principale :
-				- "card" = conteneur de présentation
-				- On affiche une citation + infos auteur + actions
+				La “carte” principale :
+				- on affiche la citation + infos auteur + actions
 			-->
 			<section v-else class="card">
 				<header class="card__header">
 					<!--
 						Photo :
-						- src peut être undefined (si pas de photo dans le JSON)
-						- le composant Photo gère un fallback automatiquement
+						- si pas de photo dans le JSON, Photo affiche un fallback
+						- donc HomeView n’a pas besoin de gérer ce cas
 					-->
 					<Photo
 						:src="currentQuote.author?.photo"
@@ -59,9 +73,9 @@
 					/>
 
 					<!--
-						Métadonnées auteur :
-						- Author gère le fallback (Anonyme)
-						- Bio ne rend rien si absent (v-if interne)
+						Infos auteur :
+						- Author affiche “Anonyme” si pas de nom
+						- Bio n’affiche rien si la bio est absente
 					-->
 					<div class="card__meta">
 						<Author :name="currentQuote.author?.name" />
@@ -69,22 +83,24 @@
 					</div>
 				</header>
 
-				<!-- Citation (texte) -->
+				<!-- Texte de la citation -->
 				<Citation :text="currentQuote.text" />
 
 				<!--
-					Action principale :
-					- nextQuote() déclenche un nouveau tirage (dans useQuotes)
-					- la vue se met à jour via la réactivité Vue
+					Bouton principal :
+					- clique => nextQuote()
+					- nextQuote change un index dans useQuotes()
+					- Vue re-render automatiquement avec la nouvelle citation
 				-->
 				<div class="card__actions">
 					<button class="btn" type="button" @click="nextQuote">Nouvelle citation</button>
 				</div>
 
 				<!--
-					Partage réseaux :
-					- ShareButtons encapsule la logique : Web Share API ou fallback liens
-					- On lui passe uniquement ce dont il a besoin : text + auteur (optionnel)
+					Partage :
+					- si le navigateur supporte le partage natif => bouton “Partager”
+					- sinon => liens de partage
+					- on lui passe uniquement les infos utiles
 				-->
 				<ShareButtons :text="currentQuote.text" :author="currentQuote.author?.name" />
 			</section>
@@ -93,20 +109,22 @@
 
 	<style scoped lang="scss">
 	/**
-	 * Styles locaux à HomeView (scoped)
-	 *
-	 * Pourquoi scoped ?
-	 * - Empêche les collisions CSS entre pages et composants.
-	 * - Permet de garder un SCSS global minimal (tokens/layout) et le reste “près” de l’UI.
+	 * Styles de HomeView (scoped = ça ne déborde pas ailleurs)
 	 *
 	 * Mobile-first :
-	 * - styles par défaut pensés pour mobile
-	 * - media query uniquement pour améliorer sur écrans plus larges
+	 * - on définit d’abord le style pour mobile
+	 * - ensuite on améliore pour les écrans plus larges
 	 */
 
+	.header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 14px;
+	}
+
 	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
 		border-radius: 14px;
 		padding: 14px;
 		display: grid;
@@ -130,22 +148,19 @@
 	}
 
 	/**
-	 * Bouton simple réutilisable à court terme.
-	 * Note : plus tard, on pourra créer un composant Button.vue si besoin.
+	 * Bouton “simple” :
+	 * - pour l’instant on met un style local
+	 * - plus tard, on pourra créer un composant Button si on en a plusieurs
 	 */
 	.btn {
-		border: 1px solid var(--border);
+		border: 1px solid #ff0000;
 		background: rgba(255, 255, 255, 0.06);
-		color: var(--text);
+		color: #000;
 		border-radius: 10px;
 		padding: 10px 12px;
 		cursor: pointer;
 	}
 
-	/**
-	 * “Upgrade” desktop :
-	 * - on augmente le padding de la card sur les écrans plus larges
-	 */
 	@media (min-width: 640px) {
 		.card {
 			padding: 18px;
